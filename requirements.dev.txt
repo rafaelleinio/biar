@@ -4,6 +4,8 @@ isort
 flake8
 flake8-isort
 flake8-docstrings
+flake8-print
+flake8-builtins
 mypy
 
 # tests
@@ -16,3 +18,4 @@ aioresponses
 # setup
 setuptools
 wheel
+twine
