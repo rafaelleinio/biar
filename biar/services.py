@@ -9,10 +9,13 @@ import certifi
 import tenacity
 from aiohttp import ClientResponseError
 from loguru import logger
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
+from yarl import URL
 
 from biar.user_agents import get_user_agent
+
+# PydanticModel = TypeVar("PydanticModel", bound=BaseModel)
 
 
 class ProxyConfig(BaseModel):
@@ -30,7 +33,7 @@ class ProxyConfig(BaseModel):
     ssl_cadata: Optional[str] = None
 
 
-class HttpResponse(BaseModel):
+class Response(BaseModel):
     """Attributes from the http request response.
 
     Attributes:
@@ -38,14 +41,33 @@ class HttpResponse(BaseModel):
         status_code: HTTP status code.
         headers: headers in the response.
         json_content: response content as json dict.
+        text_content: raw response content as a string.
 
     """
 
-    url: str
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    url: URL
     status_code: int
     headers: Dict[str, Any] = Field(default_factory=dict)
-    json_content: Optional[Union[JsonValue, List[JsonValue]]] = None
-    text_content: Optional[str] = None
+    json_content: Dict[str, JsonValue] = Field(default_factory=dict)
+    text_content: str = ""
+
+
+class StructuredResponse(Response):
+    """Attributes from the http request response.
+
+    Attributes:
+        url: final url after (possible) redirects.
+        status_code: HTTP status code.
+        headers: headers in the response.
+        json_content: response content as json dict.
+        text_content: raw response content as a string.
+        structured_content: response content as a pydantic model.
+
+    """
+
+    structured_content: Any
 
 
 class ResponseEvaluationError(Exception):
@@ -53,7 +75,7 @@ class ResponseEvaluationError(Exception):
 
 
 def evaluate_response(
-    http_response: HttpResponse, acceptable_codes: Optional[List[int]] = None
+    http_response: Response, acceptable_codes: Optional[List[int]] = None
 ) -> None:
     """Evaluate a response and raise an exception if it's not OK.
 
@@ -152,15 +174,21 @@ async def _request(
     session: aiohttp.ClientSession,
     acceptable_codes: Optional[List[int]] = None,
     **request_kwargs: Any,
-) -> HttpResponse:
+) -> Response:
     rate_limiter.limiter.try_acquire(name=rate_limiter.identity)
     async with session.request(**request_kwargs) as response:
-        http_response = HttpResponse(
-            url=str(response.url),
+        json_content = await response.json() if download_json_content else None
+        normalized_json_content = (
+            json_content
+            if isinstance(json_content, dict)
+            else {"content": json_content}
+        )
+        http_response = Response(
+            url=response.url,
             status_code=response.status,
             headers={k: v for k, v in response.headers.items()},
-            json_content=await response.json() if download_json_content else None,
-            text_content=await response.text() if download_text_content else None,
+            json_content=normalized_json_content,
+            text_content=await response.text() if download_text_content else "",
         )
     evaluate_response(http_response=http_response, acceptable_codes=acceptable_codes)
     return http_response
@@ -187,7 +215,7 @@ def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
 
 
 async def request(
-    url: str,
+    url: Union[str, URL],
     method: str,
     download_json_content: bool = True,
     download_text_content: bool = False,
@@ -202,7 +230,7 @@ async def request(
     params: Optional[Dict[str, Any]] = None,
     session: Optional[aiohttp.ClientSession] = None,
     acceptable_codes: Optional[List[int]] = None,
-) -> HttpResponse:
+) -> Response:
     """Make a request.
 
     Args:
@@ -263,7 +291,7 @@ async def request(
     new_callable = _request.retry_with(**retryer.retrying_config)  # type: ignore
 
     async with aiohttp.ClientSession() as new_session:
-        response: HttpResponse = await new_callable(
+        response: Response = await new_callable(
             download_json_content=download_json_content,
             download_text_content=download_text_content,
             rate_limiter=rate_limiter,
@@ -274,6 +302,62 @@ async def request(
 
     logger.debug("Request finished!")
     return response
+
+
+async def request_structured(
+    model: Type[BaseModel],
+    url: Union[str, URL],
+    method: str,
+    download_text_content: bool = False,
+    proxy_config: Optional[ProxyConfig] = None,
+    rate_limiter: RateLimiter = RateLimiter(),
+    retryer: Retryer = Retryer(),
+    timeout: int = 300,
+    use_random_user_agent: bool = True,
+    user_agent_list: Optional[List[str]] = None,
+    bearer_token: Optional[str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    session: Optional[aiohttp.ClientSession] = None,
+    acceptable_codes: Optional[List[int]] = None,
+) -> StructuredResponse:
+    """Make a request and structure the response.
+
+    This method forces the download of json content and the use of a pydantic model to
+    structure the response.
+
+    Args:
+        model: pydantic model to be used to structure json content.
+
+    Returns:
+        Structured json content as a pydantic model.
+
+    """
+    response = await request(
+        url=url,
+        method=method,
+        download_json_content=True,
+        download_text_content=download_text_content,
+        proxy_config=proxy_config,
+        rate_limiter=rate_limiter,
+        retryer=retryer,
+        timeout=timeout,
+        use_random_user_agent=use_random_user_agent,
+        user_agent_list=user_agent_list,
+        bearer_token=bearer_token,
+        headers=headers,
+        params=params,
+        session=session,
+        acceptable_codes=acceptable_codes,
+    )
+    return StructuredResponse(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        json_content=response.json_content,
+        text_content=response.text_content,
+        structured_content=model(**response.json_content),
+    )
 
 
 async def is_host_reachable(host: str) -> bool:

@@ -7,10 +7,12 @@ import aiodns
 import pytest
 from aiohttp.http_exceptions import HttpProcessingError
 from aioresponses import aioresponses
+from pydantic import BaseModel
+from yarl import URL
 
 import biar
 
-URL = "https://api.com/v1"
+BASE_URL = "https://api.com/v1"
 
 
 @pytest.fixture
@@ -21,23 +23,28 @@ def mock_server() -> aioresponses:
 
 class TestRequest:
     @pytest.mark.asyncio
-    async def test_request(self, mock_server: aioresponses):
+    async def test_request_structured(self, mock_server: aioresponses):
         # arrange
+        class MyModel(BaseModel):
+            key: str
+
         response_headers = {"Content-Type": "application/json"}
         response_json_content = {"key": "value"}
         mock_server.get(
-            url=URL, headers=response_headers, payload=response_json_content
+            url=BASE_URL, headers=response_headers, payload=response_json_content
         )
-        target_response = biar.HttpResponse(
-            url=URL,
+        target_response = biar.StructuredResponse(
+            url=URL(BASE_URL),
             status_code=200,
             headers=response_headers,
             json_content=response_json_content,
+            structured_content=MyModel(key="value"),
         )
 
         # act
-        output_response = await biar.request(
-            url=URL,
+        output_response = await biar.request_structured(
+            model=MyModel,
+            url=BASE_URL,
             method="GET",
         )
 
@@ -47,13 +54,13 @@ class TestRequest:
     @pytest.mark.asyncio
     async def test_request_retry_success(self, mock_server: aioresponses):
         # arrange
-        mock_server.get(url=URL, status=500)
-        mock_server.get(url=URL, status=200)
+        mock_server.get(url=BASE_URL, status=500)
+        mock_server.get(url=BASE_URL, status=200)
 
         # act
         start_ts = datetime.datetime.utcnow()
         output_response = await biar.request(
-            url=URL,
+            url=BASE_URL,
             method="GET",
             download_json_content=False,
             retryer=biar.Retryer(
@@ -72,15 +79,15 @@ class TestRequest:
     @pytest.mark.asyncio
     async def test_request_retry_exception(self, mock_server: aioresponses):
         # arrange
-        mock_server.get(url=URL, status=500)
-        mock_server.get(url=URL, exception=HttpProcessingError())
-        mock_server.get(url=URL, exception=HttpProcessingError())
+        mock_server.get(url=BASE_URL, status=500)
+        mock_server.get(url=BASE_URL, exception=HttpProcessingError())
+        mock_server.get(url=BASE_URL, exception=HttpProcessingError())
         retrier = biar.Retryer(attempts=2, max_delay=0)
 
         # act and assert
         with pytest.raises(HttpProcessingError):
             _ = await biar.request(
-                url=URL,
+                url=BASE_URL,
                 method="GET",
                 retryer=retrier,
             )
@@ -88,15 +95,15 @@ class TestRequest:
     @pytest.mark.asyncio
     async def test_request_retry_status_fail(self, mock_server: aioresponses):
         # arrange
-        mock_server.get(url=URL, status=500)
-        mock_server.get(url=URL, status=500)
-        mock_server.get(url=URL, status=500)
+        mock_server.get(url=BASE_URL, status=500)
+        mock_server.get(url=BASE_URL, status=500)
+        mock_server.get(url=BASE_URL, status=500)
         retrier = biar.Retryer(attempts=2, max_delay=0)
 
         # act and assert
         with pytest.raises(biar.ResponseEvaluationError):
             _ = await biar.request(
-                url=URL,
+                url=BASE_URL,
                 method="GET",
                 retryer=retrier,
             )
@@ -105,14 +112,14 @@ class TestRequest:
         self, event_loop: AbstractEventLoop, mock_server: aioresponses
     ):
         # arrange
-        mock_server.get(url=URL, status=200)
-        mock_server.get(url=URL, status=200)
-        mock_server.get(url=URL, status=200)
+        mock_server.get(url=BASE_URL, status=200)
+        mock_server.get(url=BASE_URL, status=200)
+        mock_server.get(url=BASE_URL, status=200)
         rate_limiter = biar.RateLimiter(rate=2, time_frame=1, identity="api")
         async_requests = [
-            biar.request(url=URL, method="GET", rate_limiter=rate_limiter),
-            biar.request(url=URL, method="GET", rate_limiter=rate_limiter),
-            biar.request(url=URL, method="GET", rate_limiter=rate_limiter),
+            biar.request(url=BASE_URL, method="GET", rate_limiter=rate_limiter),
+            biar.request(url=BASE_URL, method="GET", rate_limiter=rate_limiter),
+            biar.request(url=BASE_URL, method="GET", rate_limiter=rate_limiter),
         ]
 
         # act
