@@ -5,5 +5,9 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/rafaelleinio/biar/releases/tag/0.2.0)
+* ✨ add request_structured service
+* 📚 add first README sections
+
 ## [0.1.0](https://github.com/rafaelleinio/biar/releases/tag/0.1.0)
 * First modules and entities of biar package.
