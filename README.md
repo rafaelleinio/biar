@@ -33,7 +33,7 @@ That's why in `biar` I've packed the functionality of some top-notch Python proj
 - **[aiohttp](https://github.com/aio-libs/aiohttp)**: for lightning-fast HTTP requests in async Python.
 - **[tenacity](https://github.com/jd/tenacity)**: ensures your code doesn't give up easily, allowing retries for 
 better resilience.
-- **[pyrate-limiter](https://github.com/vutran1710/PyrateLimiter)**: manage your application's rate limits effectively.
+- **[pyrate-limiter](https://github.com/vutran1710/PyrateLimiter)**: manage rate limits effectively, async ready.
 - **[yarl](https://github.com/aio-libs/yarl)**: simplifies handling and manipulating URLs.
 - **[pydantic](https://github.com/samuelcolvin/pydantic)**: helps validate and manage data structures with ease.
 - **[loguru](https://github.com/Delgan/loguru)**: your ultimate logging companion, making logs a breeze.
@@ -153,10 +153,10 @@ async def make_requests(request_urls: List[URL]) -> List[MyModel]:
     responses = await biar.request_structured_many(
         model=MyModel,
         urls=request_urls,
-        config=biar.model.RequestConfig(
+        config=biar.RequestConfig(
             method="GET",
-            retryer=biar.model.Retryer(attempts=5),
-            rate_limiter=biar.model.RateLimiter(rate=5, identity="my_api"),
+            retryer=biar.Retryer(attempts=5),
+            rate_limiter=biar.RateLimiter(rate=5, identity="my_api"),
             download_text_content=True,
         )
     )
