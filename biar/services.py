@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import ssl
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
@@ -14,8 +13,6 @@ from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
 from yarl import URL
 
 from biar.user_agents import get_user_agent
-
-# PydanticModel = TypeVar("PydanticModel", bound=BaseModel)
 
 
 class ProxyConfig(BaseModel):
@@ -75,22 +72,23 @@ class ResponseEvaluationError(Exception):
 
 
 def evaluate_response(
-    http_response: Response, acceptable_codes: Optional[List[int]] = None
+    status_code: int,
+    acceptable_codes: Optional[List[int]] = None,
+    text_content: str = "",
 ) -> None:
     """Evaluate a response and raise an exception if it's not OK.
 
     Args:
-        http_response: response object.
+        status_code: status code from the response.
         acceptable_codes: list of acceptable status codes.
 
     Raises:
         ResponseEvaluationError if the response is not OK.
 
     """
-    if http_response.status_code not in (acceptable_codes or [200]):
+    if status_code not in (acceptable_codes or [200]):
         raise ResponseEvaluationError(
-            f"Error: status={http_response.status_code}, "
-            f"Text content (if loaded): {str(http_response.text_content)}"
+            f"Error: status={status_code}, " f"Text content (if loaded): {text_content}"
         )
 
 
@@ -134,7 +132,7 @@ class Retryer(BaseModel):
             wait=tenacity.wait_exponential(min=self.min_delay, max=self.max_delay),
             reraise=True,
             before_sleep=tenacity.before_sleep_log(
-                logger=logger, log_level=logging.WARNING  # type: ignore[arg-type]
+                logger=logger, log_level="DEBUG"  # type: ignore[arg-type]
             ),
         )
 
@@ -177,6 +175,12 @@ async def _request(
 ) -> Response:
     rate_limiter.limiter.try_acquire(name=rate_limiter.identity)
     async with session.request(**request_kwargs) as response:
+        text_content = await response.text() if download_text_content else ""
+        evaluate_response(
+            status_code=response.status,
+            acceptable_codes=acceptable_codes,
+            text_content=text_content,
+        )
         json_content = await response.json() if download_json_content else None
         normalized_json_content = (
             json_content
@@ -188,9 +192,8 @@ async def _request(
             status_code=response.status,
             headers={k: v for k, v in response.headers.items()},
             json_content=normalized_json_content,
-            text_content=await response.text() if download_text_content else "",
+            text_content=text_content,
         )
-    evaluate_response(http_response=http_response, acceptable_codes=acceptable_codes)
     return http_response
 
 
@@ -329,6 +332,8 @@ async def request_structured(
     Args:
         model: pydantic model to be used to structure json content.
 
+    Other args are the same as `biar.request`.
+
     Returns:
         Structured json content as a pydantic model.
 
@@ -358,6 +363,59 @@ async def request_structured(
         text_content=response.text_content,
         structured_content=model(**response.json_content),
     )
+
+
+async def request_structured_many(
+    model: Type[BaseModel],
+    urls: List[Union[str, URL]],
+    method: str,
+    download_text_content: bool = False,
+    proxy_config: Optional[ProxyConfig] = None,
+    rate_limiter: RateLimiter = RateLimiter(),
+    retryer: Retryer = Retryer(),
+    timeout: int = 300,
+    use_random_user_agent: bool = True,
+    user_agent_list: Optional[List[str]] = None,
+    bearer_token: Optional[str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    params: Optional[Dict[str, Any]] = None,
+    session: Optional[aiohttp.ClientSession] = None,
+    acceptable_codes: Optional[List[int]] = None,
+) -> List[StructuredResponse]:
+    """Make many requests and structure the responses.
+
+    Args:
+        urls: list of urls to send requests.
+
+    Other args are the same as `biar.request_structured`.
+
+    Returns:
+        List of structured data as pydantic models.
+
+    """
+    results: List[StructuredResponse] = await asyncio.gather(
+        *[
+            request_structured(
+                model=model,
+                url=url,
+                method=method,
+                download_text_content=download_text_content,
+                proxy_config=proxy_config,
+                rate_limiter=rate_limiter,
+                retryer=retryer,
+                timeout=timeout,
+                use_random_user_agent=use_random_user_agent,
+                user_agent_list=user_agent_list,
+                bearer_token=bearer_token,
+                headers=headers,
+                params=params,
+                session=session,
+                acceptable_codes=acceptable_codes,
+            )
+            for url in urls
+        ]
+    )
+    return results
 
 
 async def is_host_reachable(host: str) -> bool:

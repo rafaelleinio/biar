@@ -11,6 +11,7 @@ from biar.services import (
     is_host_reachable,
     request,
     request_structured,
+    request_structured_many,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "is_host_reachable",
     "get_ssl_context",
     "__metadata__",
+    "request_structured_many",
 ]

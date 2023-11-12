@@ -23,28 +23,33 @@ def mock_server() -> aioresponses:
 
 class TestRequest:
     @pytest.mark.asyncio
-    async def test_request_structured(self, mock_server: aioresponses):
+    async def test_request_structured_many(self, mock_server: aioresponses):
         # arrange
         class MyModel(BaseModel):
             key: str
 
-        response_headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
         response_json_content = {"key": "value"}
-        mock_server.get(
-            url=BASE_URL, headers=response_headers, payload=response_json_content
-        )
-        target_response = biar.StructuredResponse(
-            url=URL(BASE_URL),
-            status_code=200,
-            headers=response_headers,
-            json_content=response_json_content,
-            structured_content=MyModel(key="value"),
-        )
+        for i in range(2):
+            mock_server.get(
+                url=URL(BASE_URL),
+                headers=headers,
+                payload=response_json_content,
+            )
+        target_response = [
+            biar.StructuredResponse(
+                url=URL(BASE_URL),
+                status_code=200,
+                headers=headers,
+                json_content=response_json_content,
+                structured_content=MyModel(key="value"),
+            )
+        ] * 2
 
         # act
-        output_response = await biar.request_structured(
+        output_response = await biar.request_structured_many(
             model=MyModel,
-            url=BASE_URL,
+            urls=[BASE_URL] * 2,
             method="GET",
         )
 
