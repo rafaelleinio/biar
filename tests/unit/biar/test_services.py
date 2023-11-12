@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from yarl import URL
 
 import biar
+import biar.errors
 
 BASE_URL = "https://api.com/v1"
 
@@ -37,7 +38,7 @@ class TestRequest:
                 payload=response_json_content,
             )
         target_response = [
-            biar.StructuredResponse(
+            biar.model.StructuredResponse(
                 url=URL(BASE_URL),
                 status_code=200,
                 headers=headers,
@@ -50,7 +51,6 @@ class TestRequest:
         output_response = await biar.request_structured_many(
             model=MyModel,
             urls=[BASE_URL] * 2,
-            method="GET",
         )
 
         # assert
@@ -66,12 +66,14 @@ class TestRequest:
         start_ts = datetime.datetime.utcnow()
         output_response = await biar.request(
             url=BASE_URL,
-            method="GET",
-            download_json_content=False,
-            retryer=biar.Retryer(
-                attempts=2,
-                min_delay=1,
-                max_delay=1,
+            config=biar.RequestConfig(
+                method="GET",
+                download_json_content=False,
+                retryer=biar.model.Retryer(
+                    attempts=2,
+                    min_delay=1,
+                    max_delay=1,
+                ),
             ),
         )
         end_ts = datetime.datetime.utcnow()
@@ -87,14 +89,16 @@ class TestRequest:
         mock_server.get(url=BASE_URL, status=500)
         mock_server.get(url=BASE_URL, exception=HttpProcessingError())
         mock_server.get(url=BASE_URL, exception=HttpProcessingError())
-        retrier = biar.Retryer(attempts=2, max_delay=0)
+        retrier = biar.model.Retryer(attempts=2, max_delay=0)
 
         # act and assert
         with pytest.raises(HttpProcessingError):
             _ = await biar.request(
                 url=BASE_URL,
-                method="GET",
-                retryer=retrier,
+                config=biar.RequestConfig(
+                    method="GET",
+                    retryer=retrier,
+                ),
             )
 
     @pytest.mark.asyncio
@@ -103,14 +107,16 @@ class TestRequest:
         mock_server.get(url=BASE_URL, status=500)
         mock_server.get(url=BASE_URL, status=500)
         mock_server.get(url=BASE_URL, status=500)
-        retrier = biar.Retryer(attempts=2, max_delay=0)
+        retrier = biar.model.Retryer(attempts=2, max_delay=0)
 
         # act and assert
-        with pytest.raises(biar.ResponseEvaluationError):
+        with pytest.raises(biar.errors.ResponseEvaluationError):
             _ = await biar.request(
                 url=BASE_URL,
-                method="GET",
-                retryer=retrier,
+                config=biar.RequestConfig(
+                    method="GET",
+                    retryer=retrier,
+                ),
             )
 
     def test_request_rate_limit(
@@ -120,11 +126,15 @@ class TestRequest:
         mock_server.get(url=BASE_URL, status=200)
         mock_server.get(url=BASE_URL, status=200)
         mock_server.get(url=BASE_URL, status=200)
-        rate_limiter = biar.RateLimiter(rate=2, time_frame=1, identity="api")
+        rate_limiter = biar.model.RateLimiter(rate=2, time_frame=1, identity="api")
+        config = biar.RequestConfig(
+            method="GET",
+            rate_limiter=rate_limiter,
+        )
         async_requests = [
-            biar.request(url=BASE_URL, method="GET", rate_limiter=rate_limiter),
-            biar.request(url=BASE_URL, method="GET", rate_limiter=rate_limiter),
-            biar.request(url=BASE_URL, method="GET", rate_limiter=rate_limiter),
+            biar.request(url=BASE_URL, config=config),
+            biar.request(url=BASE_URL, config=config),
+            biar.request(url=BASE_URL, config=config),
         ]
 
         # act

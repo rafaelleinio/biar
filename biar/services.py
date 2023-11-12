@@ -1,74 +1,23 @@
 import asyncio
 import ssl
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, List, Optional, Type, Union
 
 import aiodns
 import aiohttp
 import certifi
 import tenacity
-from aiohttp import ClientResponseError
 from loguru import logger
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
-from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
+from pydantic import BaseModel
 from yarl import URL
 
+from biar import (
+    RateLimiter,
+    RequestConfig,
+    Response,
+    ResponseEvaluationError,
+    StructuredResponse,
+)
 from biar.user_agents import get_user_agent
-
-
-class ProxyConfig(BaseModel):
-    """Proxy configuration.
-
-    Attributes:
-        host: proxy address.
-        headers: additional configuration required by the proxy.
-        ssl_cadata: certificate as a string required by some proxies to use SSL.
-
-    """
-
-    host: str
-    headers: Optional[Dict[str, Any]] = None
-    ssl_cadata: Optional[str] = None
-
-
-class Response(BaseModel):
-    """Attributes from the http request response.
-
-    Attributes:
-        url: final url after (possible) redirects.
-        status_code: HTTP status code.
-        headers: headers in the response.
-        json_content: response content as json dict.
-        text_content: raw response content as a string.
-
-    """
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    url: URL
-    status_code: int
-    headers: Dict[str, Any] = Field(default_factory=dict)
-    json_content: Dict[str, JsonValue] = Field(default_factory=dict)
-    text_content: str = ""
-
-
-class StructuredResponse(Response):
-    """Attributes from the http request response.
-
-    Attributes:
-        url: final url after (possible) redirects.
-        status_code: HTTP status code.
-        headers: headers in the response.
-        json_content: response content as json dict.
-        text_content: raw response content as a string.
-        structured_content: response content as a pydantic model.
-
-    """
-
-    structured_content: Any
-
-
-class ResponseEvaluationError(Exception):
-    """Base Exception for non-OK responses."""
 
 
 def evaluate_response(
@@ -90,78 +39,6 @@ def evaluate_response(
         raise ResponseEvaluationError(
             f"Error: status={status_code}, " f"Text content (if loaded): {text_content}"
         )
-
-
-class Retryer(BaseModel):
-    """Retry logic with exponential backoff strategy.
-
-    Attributes:
-        attempts: number of attempts.
-            `attempts=1` means only one try and no subsequent retry attempts.
-        min_delay: number of seconds as the starting delay.
-        max_delay: number of seconds as the maximum achieving delay.
-        retry_if_exception_in: retry if exception found in this tuple.
-            A ResponseEvaluationError is always added dynamically to be retried.
-
-    """
-
-    attempts: int = 1
-    min_delay: int = 0
-    max_delay: int = 10
-    retry_if_exception_in: Tuple[Type[BaseException], ...] = (
-        ClientResponseError,
-        asyncio.TimeoutError,
-    )
-
-    @property
-    def retrying_config(self) -> Dict[str, Any]:
-        """Configuration for retrying logic.
-
-        Changing arguments at run time reference:
-        https://github.com/jd/tenacity#changing-arguments-at-run-time
-
-        Returns:
-            kwargs dictionary for tenacity.BaseRetrying.
-
-        """
-        return dict(
-            stop=tenacity.stop_after_attempt(self.attempts),
-            retry=tenacity.retry_if_exception_type(
-                exception_types=self.retry_if_exception_in + (ResponseEvaluationError,)
-            ),
-            wait=tenacity.wait_exponential(min=self.min_delay, max=self.max_delay),
-            reraise=True,
-            before_sleep=tenacity.before_sleep_log(
-                logger=logger, log_level="DEBUG"  # type: ignore[arg-type]
-            ),
-        )
-
-
-class RateLimiter:
-    """Limit the number of requests in a given time frame.
-
-    Attributes:
-        rate: number of requests allowed in the given time frame.
-        time_frame: number of seconds for the time frame.
-        limiter: in memory bucket to limit the number of requests.
-        identity: identification for the rate-limiting bucket.
-            Same identity can be used universally for all endpoints in a given host, if
-            the API have a global limit. If the API have different limits for each
-            endpoint, different identities can be used as well.
-
-    """
-
-    def __init__(self, rate: int = 10, time_frame: int = 1, identity: str = "default"):
-        self.rate = rate
-        self.time_frame = time_frame
-        self.limiter = Limiter(
-            InMemoryBucket(
-                rates=[Rate(limit=rate, interval=time_frame * Duration.SECOND.value)]
-            ),
-            raise_when_fail=False,
-            max_delay=Duration.MINUTE.value,
-        )
-        self.identity = identity
 
 
 @tenacity.retry
@@ -219,87 +96,60 @@ def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
 
 async def request(
     url: Union[str, URL],
-    method: str,
-    download_json_content: bool = True,
-    download_text_content: bool = False,
-    proxy_config: Optional[ProxyConfig] = None,
-    rate_limiter: RateLimiter = RateLimiter(),
-    retryer: Retryer = Retryer(),
-    timeout: int = 300,
-    use_random_user_agent: bool = True,
-    user_agent_list: Optional[List[str]] = None,
-    bearer_token: Optional[str] = None,
-    headers: Optional[Dict[str, str]] = None,
-    params: Optional[Dict[str, Any]] = None,
-    session: Optional[aiohttp.ClientSession] = None,
-    acceptable_codes: Optional[List[int]] = None,
+    config: RequestConfig = RequestConfig(),
 ) -> Response:
     """Make a request.
 
     Args:
         url: url to send request.
-        method: any available method in aiohttp.
-            E.g. GET, POST, PUT, DELETE.
-        download_json_content: if true will await for json content download.
-        download_text_content: if true will await for text content download.
-        proxy_config: proxy configuration.
-        rate_limiter: rate limiting configuration.
-        retryer: retry logic configuration.
-        timeout: maximum number of seconds for timeout.
-            By default, is 300 seconds (5 minutes).
-        use_random_user_agent: if true will use a random user agent.
-        user_agent_list: list of user agents to be randomly selected.
-            By default, it uses a sample from `biar.user_agents` module.
-        bearer_token: bearer token to be used in the request.
-        headers: headers dictionary to use in request.
-        params: parameters dictionary to use in request.
-        session: aiohttp session to be used in request.
-            If the user wants to use a custom session and handle its lifecycle, it can
-            be passed here.
-        acceptable_codes: list of acceptable status codes.
-            If the response status code is not in this list, an exception will be
-            raised. By default, it only accepts 200.
+        config: request configuration.
 
     Returns:
-        Structured main attributes from response object.
+        Response object from the request.
 
     """
-    logger.debug(f"Request started, {method} method to {url}...")
+    logger.debug(f"Request started, {config.method} method to {url}...")
     proxy_kwargs = (
         {
-            "proxy": proxy_config.host,
-            "proxy_headers": proxy_config.headers,
-            "ssl_context": get_ssl_context(extra_certificate=proxy_config.ssl_cadata),
+            "proxy": config.proxy_config.host,
+            "proxy_headers": config.proxy_config.headers,
+            "ssl_context": get_ssl_context(
+                extra_certificate=config.proxy_config.ssl_cadata
+            ),
         }
-        if proxy_config
+        if config.proxy_config
         else {}
     )
     final_headers = {
-        **(headers or {}),
+        **(config.headers or {}),
         **(
-            {"User-Agent": get_user_agent(user_agent_list=user_agent_list)}
-            if use_random_user_agent
+            {"User-Agent": get_user_agent(user_agent_list=config.user_agent_list)}
+            if config.use_random_user_agent
             else {}
         ),
-        **({"Authorization": f"Bearer {bearer_token}"} if bearer_token else {}),
+        **(
+            {"Authorization": f"Bearer {config.bearer_token}"}
+            if config.bearer_token
+            else {}
+        ),
     }
     all_kwargs = {
         "url": url,
-        "method": method,
+        "method": config.method,
         "headers": final_headers,
-        "params": params or {},
-        "timeout": timeout,
+        "params": config.params or {},
+        "timeout": config.timeout,
         **proxy_kwargs,
     }
-    new_callable = _request.retry_with(**retryer.retrying_config)  # type: ignore
+    new_callable = _request.retry_with(**config.retryer.retrying_config)  # type: ignore
 
     async with aiohttp.ClientSession() as new_session:
         response: Response = await new_callable(
-            download_json_content=download_json_content,
-            download_text_content=download_text_content,
-            rate_limiter=rate_limiter,
-            session=session or new_session,
-            acceptable_codes=acceptable_codes,
+            download_json_content=config.download_json_content,
+            download_text_content=config.download_text_content,
+            rate_limiter=config.rate_limiter,
+            session=config.session or new_session,
+            acceptable_codes=config.acceptable_codes,
             **all_kwargs,
         )
 
@@ -310,50 +160,27 @@ async def request(
 async def request_structured(
     model: Type[BaseModel],
     url: Union[str, URL],
-    method: str,
-    download_text_content: bool = False,
-    proxy_config: Optional[ProxyConfig] = None,
-    rate_limiter: RateLimiter = RateLimiter(),
-    retryer: Retryer = Retryer(),
-    timeout: int = 300,
-    use_random_user_agent: bool = True,
-    user_agent_list: Optional[List[str]] = None,
-    bearer_token: Optional[str] = None,
-    headers: Optional[Dict[str, str]] = None,
-    params: Optional[Dict[str, Any]] = None,
-    session: Optional[aiohttp.ClientSession] = None,
-    acceptable_codes: Optional[List[int]] = None,
+    config: RequestConfig = RequestConfig(),
 ) -> StructuredResponse:
     """Make a request and structure the response.
 
-    This method forces the download of json content and the use of a pydantic model to
-    structure the response.
+    This function forces the download of the json content to be deserialized as a
+    pydantic model.
 
     Args:
-        model: pydantic model to be used to structure json content.
-
-    Other args are the same as `biar.request`.
+        model: pydantic model to be used to structure the response.
+        url: url to send request.
+        config: request configuration.
 
     Returns:
-        Structured json content as a pydantic model.
+        Structured response from the request, with with data deserialized as a pydantic
+        model.
 
     """
+    new_config = config.model_copy(update=dict(download_json_content=True))
     response = await request(
         url=url,
-        method=method,
-        download_json_content=True,
-        download_text_content=download_text_content,
-        proxy_config=proxy_config,
-        rate_limiter=rate_limiter,
-        retryer=retryer,
-        timeout=timeout,
-        use_random_user_agent=use_random_user_agent,
-        user_agent_list=user_agent_list,
-        bearer_token=bearer_token,
-        headers=headers,
-        params=params,
-        session=session,
-        acceptable_codes=acceptable_codes,
+        config=new_config,
     )
     return StructuredResponse(
         url=response.url,
@@ -368,24 +195,14 @@ async def request_structured(
 async def request_structured_many(
     model: Type[BaseModel],
     urls: List[Union[str, URL]],
-    method: str,
-    download_text_content: bool = False,
-    proxy_config: Optional[ProxyConfig] = None,
-    rate_limiter: RateLimiter = RateLimiter(),
-    retryer: Retryer = Retryer(),
-    timeout: int = 300,
-    use_random_user_agent: bool = True,
-    user_agent_list: Optional[List[str]] = None,
-    bearer_token: Optional[str] = None,
-    headers: Optional[Dict[str, str]] = None,
-    params: Optional[Dict[str, Any]] = None,
-    session: Optional[aiohttp.ClientSession] = None,
-    acceptable_codes: Optional[List[int]] = None,
+    config: RequestConfig = RequestConfig(),
 ) -> List[StructuredResponse]:
     """Make many requests and structure the responses.
 
     Args:
+        model: pydantic model to be used to structure the response.
         urls: list of urls to send requests.
+        config: request configuration.
 
     Other args are the same as `biar.request_structured`.
 
@@ -394,26 +211,7 @@ async def request_structured_many(
 
     """
     results: List[StructuredResponse] = await asyncio.gather(
-        *[
-            request_structured(
-                model=model,
-                url=url,
-                method=method,
-                download_text_content=download_text_content,
-                proxy_config=proxy_config,
-                rate_limiter=rate_limiter,
-                retryer=retryer,
-                timeout=timeout,
-                use_random_user_agent=use_random_user_agent,
-                user_agent_list=user_agent_list,
-                bearer_token=bearer_token,
-                headers=headers,
-                params=params,
-                session=session,
-                acceptable_codes=acceptable_codes,
-            )
-            for url in urls
-        ]
+        *[request_structured(model=model, url=url, config=config) for url in urls]
     )
     return results
 
