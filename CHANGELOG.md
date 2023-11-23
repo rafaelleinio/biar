@@ -5,6 +5,11 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/rafaelleinio/biar/releases/tag/0.4.0)
+* 📚 adjust README example
+* ✨ add payload arg and request_many service
+* 🛠 adjust config typing
+
 ## [0.3.0](https://github.com/rafaelleinio/biar/releases/tag/0.3.0)
 * 📚 Add README examples
 * 🛠 refactor modules and services args
