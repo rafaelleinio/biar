@@ -46,9 +46,18 @@ Give `biar` a spin and see how it streamlines your async request development!
 
 ## Examples
 
+
+### With `biar` vs without
 Imagine a scenario where you need to make several requests to an API. But not only that,
-you also need to handle rate limits, retries, and logging. Check the test scenario
-below:
+you also need to handle rate limits, retries, and logging.
+
+Imagine you need to make 10 requests to an API. The API has a rate limit of 5 requests
+per second. The API is not very stable, so could set up a retry each request up to 5 
+times. The rate limit is 5 requests per second. You need to log each request and its
+response.
+
+We can use aioresponses to mock the server and simulate the scenario. Check the
+example below:
 
 ```python
 import asyncio
@@ -67,7 +76,7 @@ class MyModel(BaseModel):
 
 async def main():
     with aioresponses() as mock_server:
-        # Set up mock responses using aioresponses
+        # set up mock server
         request_urls = []
         for i in range(10):
             url = BASE_URL / str(i)
@@ -137,9 +146,11 @@ async def make_requests(request_urls: List[URL]) -> List[MyModel]:
 ```
 
 Using the right tools is not terrible right? But depend on importing several things and
-knowing how to use these libraries. However, this is obviously not the only way to do 
-it. Without a standard way to handle these requests, you'll probably end up with a lot 
-of boilerplate code, and different developers will implement it in different ways.
+knowing how to use these libraries. There's a lot of concepts to understand here like
+context managers, decorators, async, etc. Additionally, this is obviously not the only 
+way to do it. Without a standard way to handle these requests, you'll probably end up 
+with a lot of boilerplate code, and different developers will implement it in different
+ways.
 
 With `biar`, you can implement the same `make_requests` function like this:
 
@@ -155,9 +166,8 @@ async def make_requests(request_urls: List[URL]) -> List[MyModel]:
         urls=request_urls,
         config=biar.RequestConfig(
             method="GET",
-            retryer=biar.Retryer(attempts=5),
-            rate_limiter=biar.RateLimiter(rate=5, identity="my_api"),
-            download_text_content=True,
+            retryer=biar.Retryer(attempts=5, min_delay=0, max_delay=10),
+            rate_limiter=biar.RateLimiter(rate=5, time_frame=1),
         )
     )
     return [response.structured_content for response in responses]
@@ -165,7 +175,7 @@ async def make_requests(request_urls: List[URL]) -> List[MyModel]:
 
 Easy, right? ✨🍰
 
-Here's the output:
+You also automatically get a nice log:
 
 ```
 2023-11-12 02:10:45.084 | DEBUG    | biar.services:request:111 - Request started, GET method to https://api.com/v1/entity/0...
@@ -203,7 +213,66 @@ Structured content:
 
 ```
 
+### Post request with structured payload
+You don't  need to deal with json serialization. You can make post requests passing a 
+payload as a `pydantic` model. Check the example below:
+
+```python
+import asyncio
+import datetime
+
+from aioresponses import CallbackResult, aioresponses
+from pydantic import BaseModel
+from yarl import URL
+
+import biar
+
+BASE_URL = URL("https://api.com/v1/entity/")
+
+
+class Payload(BaseModel):
+    id: str
+    ts: datetime.datetime
+    feature: int
+
+
+async def main():
+    with aioresponses() as mock_server:
+        # set up mock server
+        def callback(_, **kwargs):
+            json_payload = kwargs.get("json")
+            print(f"Received payload: {json_payload}")
+            return CallbackResult(status=200)
+
+        mock_server.post(url=BASE_URL / "id", status=200, callback=callback)
+
+        # act
+        _ = await biar.request(
+            url=BASE_URL / "id",
+            config=biar.RequestConfig(method="POST"),
+            payload=Payload(id="id", ts=datetime.datetime.now(), feature=123),
+        )
+
+
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+
+```
+
+Output:
+```
+2023-11-23 01:14:33.839 | DEBUG    | biar.services:request:113 - Request started, POST method to https://api.com/v1/entity/id...
+2023-11-23 01:14:33.840 | DEBUG    | biar.services:request:159 - Request finished!
+Received payload: {'id': 'id', 'ts': '2023-11-23T01:15:43.883492', 'feature': 123}
+```
+
+
+### More examples
+
 Check more examples in the unit tests [here](https://github.com/rafaelleinio/biar/blob/main/tests/unit/biar/test_services.py).
+
+
 
 ## Development
 After creating your virtual environment:
