@@ -1,6 +1,6 @@
 import asyncio
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 import aiohttp
 import tenacity
@@ -176,9 +176,9 @@ class RequestConfig(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    method: str = "GET"
+    method: Literal["GET", "POST", "PUT", "DELETE"] = "GET"
     download_json_content: bool = True
-    download_text_content: bool = False
+    download_text_content: bool = True
     proxy_config: Optional[ProxyConfig] = None
     rate_limiter: RateLimiter = RateLimiter()
     retryer: Retryer = Retryer()
