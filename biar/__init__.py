@@ -13,6 +13,7 @@ from biar.services import (
     get_ssl_context,
     is_host_reachable,
     request,
+    request_many,
     request_structured,
     request_structured_many,
 )
@@ -32,4 +33,5 @@ __all__ = [
     "request_structured",
     "request_structured_many",
     "ResponseEvaluationError",
+    "request_many",
 ]

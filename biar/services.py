@@ -97,30 +97,21 @@ def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
 async def request(
     url: Union[str, URL],
     config: RequestConfig = RequestConfig(),
+    payload: Optional[BaseModel] = None,
 ) -> Response:
     """Make a request.
 
     Args:
         url: url to send request.
         config: request configuration.
+        payload: payload to be sent in the request as a structured pydantic model.
 
     Returns:
         Response object from the request.
 
     """
     logger.debug(f"Request started, {config.method} method to {url}...")
-    proxy_kwargs = (
-        {
-            "proxy": config.proxy_config.host,
-            "proxy_headers": config.proxy_config.headers,
-            "ssl_context": get_ssl_context(
-                extra_certificate=config.proxy_config.ssl_cadata
-            ),
-        }
-        if config.proxy_config
-        else {}
-    )
-    final_headers = {
+    headers = {
         **(config.headers or {}),
         **(
             {"User-Agent": get_user_agent(user_agent_list=config.user_agent_list)}
@@ -133,12 +124,24 @@ async def request(
             else {}
         ),
     }
+    proxy_kwargs = (
+        {
+            "proxy": config.proxy_config.host,
+            "proxy_headers": config.proxy_config.headers,
+            "ssl_context": get_ssl_context(
+                extra_certificate=config.proxy_config.ssl_cadata
+            ),
+        }
+        if config.proxy_config
+        else {}
+    )
     all_kwargs = {
         "url": url,
         "method": config.method,
-        "headers": final_headers,
-        "params": config.params or {},
+        "headers": headers,
+        "params": config.params or None,
         "timeout": config.timeout,
+        "json": payload.model_dump(mode="json") if payload else None,
         **proxy_kwargs,
     }
     new_callable = _request.retry_with(**config.retryer.retrying_config)  # type: ignore
@@ -157,10 +160,64 @@ async def request(
     return response
 
 
+def _normalize_payloads(
+    urls: List[Union[str, URL]],
+    payloads: Optional[List[BaseModel]] = None,
+) -> Optional[List[BaseModel]]:
+    payloads = payloads or []
+    if payloads and len(urls) != len(payloads):
+        raise ValueError(
+            f"Number of urls ({len(urls)}) and payloads ({len(payloads or [])}) "
+            f"must be the same."
+        )
+    return payloads
+
+
+async def request_many(
+    urls: List[Union[str, URL]],
+    config: RequestConfig = RequestConfig(),
+    payloads: Optional[List[BaseModel]] = None,
+) -> List[Response]:
+    """Make many requests.
+
+    Args:
+        urls: list of urls to send requests.
+        config: request configuration.
+        payloads: list of payloads as structured pydantic models.
+
+    Returns:
+        List of response objects from the requests.
+
+    """
+    payloads = _normalize_payloads(urls=urls, payloads=payloads)
+    coroutines = (
+        [
+            request(
+                url=url,
+                config=config,
+                payload=payload,
+            )
+            for url, payload in zip(urls, payloads)
+        ]
+        if payloads
+        else [
+            request(
+                url=url,
+                config=config,
+            )
+            for url in urls
+        ]
+    )
+
+    results: List[Response] = await asyncio.gather(*coroutines)
+    return results
+
+
 async def request_structured(
     model: Type[BaseModel],
     url: Union[str, URL],
     config: RequestConfig = RequestConfig(),
+    payload: Optional[BaseModel] = None,
 ) -> StructuredResponse:
     """Make a request and structure the response.
 
@@ -168,20 +225,17 @@ async def request_structured(
     pydantic model.
 
     Args:
-        model: pydantic model to be used to structure the response.
+        model: pydantic model to be used to structure the response content.
         url: url to send request.
         config: request configuration.
+        payload: payload to be sent in the request as a structured pydantic model.
 
     Returns:
-        Structured response from the request, with with data deserialized as a pydantic
-        model.
+        Structured response content deserialized as a pydantic model.
 
     """
     new_config = config.model_copy(update=dict(download_json_content=True))
-    response = await request(
-        url=url,
-        config=new_config,
-    )
+    response = await request(url=url, config=new_config, payload=payload)
     return StructuredResponse(
         url=response.url,
         status_code=response.status_code,
@@ -196,6 +250,7 @@ async def request_structured_many(
     model: Type[BaseModel],
     urls: List[Union[str, URL]],
     config: RequestConfig = RequestConfig(),
+    payloads: Optional[List[BaseModel]] = None,
 ) -> List[StructuredResponse]:
     """Make many requests and structure the responses.
 
@@ -203,16 +258,35 @@ async def request_structured_many(
         model: pydantic model to be used to structure the response.
         urls: list of urls to send requests.
         config: request configuration.
-
-    Other args are the same as `biar.request_structured`.
+        payloads: list of payloads as structured pydantic models.
 
     Returns:
-        List of structured data as pydantic models.
+        List of structured response content deserialized as a pydantic model.
 
     """
-    results: List[StructuredResponse] = await asyncio.gather(
-        *[request_structured(model=model, url=url, config=config) for url in urls]
+    payloads = _normalize_payloads(urls=urls, payloads=payloads)
+    coroutines = (
+        [
+            request_structured(
+                model=model,
+                url=url,
+                config=config,
+                payload=payload,
+            )
+            for url, payload in zip(urls, payloads)
+        ]
+        if payloads
+        else [
+            request_structured(
+                model=model,
+                url=url,
+                config=config,
+            )
+            for url in urls
+        ]
     )
+
+    results: List[StructuredResponse] = await asyncio.gather(*coroutines)
     return results
 
 

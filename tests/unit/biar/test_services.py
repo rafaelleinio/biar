@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import aiodns
 import pytest
 from aiohttp.http_exceptions import HttpProcessingError
-from aioresponses import aioresponses
+from aioresponses import CallbackResult, aioresponses
 from pydantic import BaseModel
 from yarl import URL
 
@@ -51,10 +51,47 @@ class TestRequest:
         output_response = await biar.request_structured_many(
             model=MyModel,
             urls=[BASE_URL] * 2,
+            config=biar.RequestConfig(download_text_content=False),
         )
 
         # assert
         assert target_response == output_response
+
+    @pytest.mark.asyncio
+    async def test_request_many_payload(self, mock_server: aioresponses):
+        # arrange
+        def callback(url: URL, **kwargs):
+            if url == URL(BASE_URL) / "1" and kwargs["json"] == {
+                "key": "1",
+                "ts": "2023-01-01T00:00:00",
+            }:
+                return CallbackResult(status=200)
+            elif url == URL(BASE_URL) / "2" and kwargs["json"] == {
+                "key": "2",
+                "ts": "2023-01-02T00:00:00",
+            }:
+                return CallbackResult(status=200)
+            return CallbackResult(status=500)
+
+        mock_server.put(url=URL(BASE_URL) / "1", callback=callback)
+        mock_server.put(url=URL(BASE_URL) / "2", callback=callback)
+
+        class Payload(BaseModel):
+            key: str
+            ts: datetime.datetime
+
+        # act
+        output_responses = await biar.request_many(
+            urls=[URL(BASE_URL) / "1", URL(BASE_URL) / "2"],
+            config=biar.RequestConfig(method="PUT"),
+            payloads=[
+                Payload(key="1", ts="2023-01-01T00:00:00"),
+                Payload(key="2", ts="2023-01-02T00:00:00"),
+            ],
+        )
+
+        # assert
+        assert all([response.status_code == 200 for response in output_responses])
 
     @pytest.mark.asyncio
     async def test_request_retry_success(self, mock_server: aioresponses):
@@ -145,6 +182,21 @@ class TestRequest:
 
         # assert
         assert 1 < elapsed_time < 2
+
+    @pytest.mark.asyncio
+    async def test_request_structured_many_value_error(self):
+        # arrange
+        class MyModel(BaseModel):
+            key: str
+
+        # act and assert
+        with pytest.raises(ValueError):
+            _ = await biar.request_structured_many(
+                model=MyModel,
+                urls=[BASE_URL] * 2,
+                config=biar.RequestConfig(download_text_content=False),
+                payloads=[MyModel(key="value")],
+            )
 
 
 def test_get_ssl_context():
