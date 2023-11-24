@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 import ssl
-from typing import Any, Callable, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import aiodns
 import aiohttp
@@ -119,7 +119,7 @@ def _build_kwargs(
     url: Union[str, URL],
     config: RequestConfig,
     payload: Optional[BaseModel] = None,
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     headers = {
         **(config.headers or {}),
         **(
