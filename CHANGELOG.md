@@ -5,6 +5,10 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/rafaelleinio/biar/releases/tag/0.5.0)
+* ✨ add retry based on content strategy
+* ✨ add poll service
+
 ## [0.4.0](https://github.com/rafaelleinio/biar/releases/tag/0.4.0)
 * 📚 adjust README example
 * ✨ add payload arg and request_many service
