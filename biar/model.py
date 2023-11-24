@@ -1,6 +1,6 @@
 import asyncio
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type
 
 import aiohttp
 import tenacity
@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, computed_field
 from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
 from yarl import URL
 
-from biar import ResponseEvaluationError
+from biar.errors import ContentCallbackError, ResponseEvaluationError
 
 
 class ProxyConfig(BaseModel):
@@ -84,7 +84,9 @@ class Retryer(BaseModel):
     retry_if_exception_in: Tuple[Type[BaseException], ...] = (
         ClientResponseError,
         asyncio.TimeoutError,
+        ContentCallbackError,
     )
+    retry_based_on_content_callback: Optional[Callable[[BaseModel], bool]] = None
 
     @property
     def retrying_config(self) -> Dict[str, Any]:
@@ -190,3 +192,19 @@ class RequestConfig(BaseModel):
     params: Optional[Dict[str, Any]] = None
     session: Optional[aiohttp.ClientSession] = None
     acceptable_codes: Optional[List[int]] = None
+
+
+class PollConfig(BaseModel):
+    """Poll configuration model.
+
+    Args:
+        timeout: timeout in seconds.
+        interval: interval in seconds between polls.
+        success_condition: callback to be called after each poll.
+            The callback should return True if the polling should stop.
+
+    """
+
+    timeout: float = 60 * 5
+    interval: float = 5
+    success_condition: Callable[[BaseModel], bool]

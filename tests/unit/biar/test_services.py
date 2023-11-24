@@ -1,6 +1,7 @@
 import datetime
 import ssl
 from asyncio import AbstractEventLoop, gather
+from typing import List
 from unittest.mock import AsyncMock, patch
 
 import aiodns
@@ -196,6 +197,80 @@ class TestRequest:
                 urls=[BASE_URL] * 2,
                 config=biar.RequestConfig(download_text_content=False),
                 payloads=[MyModel(key="value")],
+            )
+
+    @pytest.mark.asyncio
+    async def test_request_structured_retry_on_content(self, mock_server: aioresponses):
+        # arrange
+        class MyModel(BaseModel):
+            key: str
+            items: List[int]
+
+        mock_server.get(url=BASE_URL, status=200, payload={"key": "value", "items": []})
+        mock_server.get(url=BASE_URL, status=200, payload={"key": "value", "items": []})
+        mock_server.get(
+            url=BASE_URL, status=200, payload={"key": "value", "items": [1, 2, 3]}
+        )
+
+        # act
+        output_response = await biar.request_structured(
+            model=MyModel,
+            url=BASE_URL,
+            config=biar.RequestConfig(
+                method="GET",
+                retryer=biar.model.Retryer(
+                    attempts=3,
+                    max_delay=0,
+                    retry_based_on_content_callback=lambda x: not x.items,
+                ),
+            ),
+        )
+
+        # assert
+        assert output_response.structured_content.items == [1, 2, 3]
+
+    @pytest.mark.asyncio
+    async def test_poll(self, mock_server: aioresponses):
+        # arrange
+        class MyModel(BaseModel):
+            status: str
+
+        mock_server.get(url=BASE_URL, status=200, payload={"status": "pending"})
+        mock_server.get(url=BASE_URL, status=200, payload={"status": "pending"})
+        mock_server.get(url=BASE_URL, status=200, payload={"status": "success"})
+
+        # act
+        output_response = await biar.poll(
+            model=MyModel,
+            poll_config=biar.PollConfig(
+                timeout=1, interval=0, success_condition=lambda x: x.status == "success"
+            ),
+            url=BASE_URL,
+        )
+
+        # assert
+        assert output_response.structured_content.status == "success"
+
+    @pytest.mark.asyncio
+    async def test_poll_timeout(self, mock_server: aioresponses):
+        # arrange
+        class MyModel(BaseModel):
+            status: str
+
+        mock_server.get(url=BASE_URL, status=200, payload={"status": "pending"})
+        mock_server.get(url=BASE_URL, status=200, payload={"status": "pending"})
+        mock_server.get(url=BASE_URL, status=200, payload={"status": "pending"})
+
+        # act and assert
+        with pytest.raises(biar.errors.PollError):
+            _ = await biar.poll(
+                model=MyModel,
+                poll_config=biar.PollConfig(
+                    timeout=0.1,
+                    interval=0.05,
+                    success_condition=lambda x: x.status == "success",
+                ),
+                url=BASE_URL,
             )
 
 

@@ -1,6 +1,7 @@
 import asyncio
+import datetime
 import ssl
-from typing import Any, List, Optional, Type, Union
+from typing import Any, Callable, List, Optional, Type, Union
 
 import aiodns
 import aiohttp
@@ -11,6 +12,9 @@ from pydantic import BaseModel
 from yarl import URL
 
 from biar import (
+    ContentCallbackError,
+    PollConfig,
+    PollError,
     RateLimiter,
     RequestConfig,
     Response,
@@ -20,58 +24,22 @@ from biar import (
 from biar.user_agents import get_user_agent
 
 
-def evaluate_response(
-    status_code: int,
-    acceptable_codes: Optional[List[int]] = None,
-    text_content: str = "",
-) -> None:
-    """Evaluate a response and raise an exception if it's not OK.
+async def is_host_reachable(host: str) -> bool:
+    """Async check if a host is reachable.
 
     Args:
-        status_code: status code from the response.
-        acceptable_codes: list of acceptable status codes.
+        host: url to check if is reachable.
 
-    Raises:
-        ResponseEvaluationError if the response is not OK.
+    Returns:
+        True if the host is reachable.
 
     """
-    if status_code not in (acceptable_codes or [200]):
-        raise ResponseEvaluationError(
-            f"Error: status={status_code}, " f"Text content (if loaded): {text_content}"
-        )
-
-
-@tenacity.retry
-async def _request(
-    download_json_content: bool,
-    download_text_content: bool,
-    rate_limiter: RateLimiter,
-    session: aiohttp.ClientSession,
-    acceptable_codes: Optional[List[int]] = None,
-    **request_kwargs: Any,
-) -> Response:
-    rate_limiter.limiter.try_acquire(name=rate_limiter.identity)
-    async with session.request(**request_kwargs) as response:
-        text_content = await response.text() if download_text_content else ""
-        evaluate_response(
-            status_code=response.status,
-            acceptable_codes=acceptable_codes,
-            text_content=text_content,
-        )
-        json_content = await response.json() if download_json_content else None
-        normalized_json_content = (
-            json_content
-            if isinstance(json_content, dict)
-            else {"content": json_content}
-        )
-        http_response = Response(
-            url=response.url,
-            status_code=response.status,
-            headers={k: v for k, v in response.headers.items()},
-            json_content=normalized_json_content,
-            text_content=text_content,
-        )
-    return http_response
+    dns_solver = aiodns.DNSResolver()
+    try:
+        _ = await dns_solver.query(host, qtype="A")
+        return True
+    except aiodns.error.DNSError:
+        return False
 
 
 def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
@@ -94,23 +62,64 @@ def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
     return ssl.create_default_context(cadata=certificate)
 
 
-async def request(
-    url: Union[str, URL],
-    config: RequestConfig = RequestConfig(),
-    payload: Optional[BaseModel] = None,
+async def _request_base(
+    download_json_content: bool,
+    download_text_content: bool,
+    rate_limiter: RateLimiter,
+    session: aiohttp.ClientSession,
+    acceptable_codes: Optional[List[int]] = None,
+    **request_kwargs: Any,
 ) -> Response:
-    """Make a request.
+    rate_limiter.limiter.try_acquire(name=rate_limiter.identity)
+    async with session.request(**request_kwargs) as response:
+        text_content = await response.text() if download_text_content else ""
+        if response.status not in (acceptable_codes or [200]):
+            raise ResponseEvaluationError(
+                f"Error: status={response.status}, "
+                f"Text content (if loaded): {text_content}"
+            )
 
-    Args:
-        url: url to send request.
-        config: request configuration.
-        payload: payload to be sent in the request as a structured pydantic model.
+        json_content = await response.json() if download_json_content else None
+        normalized_json_content = (
+            json_content
+            if isinstance(json_content, dict)
+            else {"content": json_content}
+        )
+        http_response = Response(
+            url=response.url,
+            status_code=response.status,
+            headers={k: v for k, v in response.headers.items()},
+            json_content=normalized_json_content,
+            text_content=text_content,
+        )
 
-    Returns:
-        Response object from the request.
+    return http_response
 
-    """
-    logger.debug(f"Request started, {config.method} method to {url}...")
+
+@tenacity.retry
+async def _request(
+    download_json_content: bool,
+    download_text_content: bool,
+    rate_limiter: RateLimiter,
+    session: aiohttp.ClientSession,
+    acceptable_codes: Optional[List[int]] = None,
+    **request_kwargs: Any,
+) -> Response:
+    return await _request_base(
+        download_json_content=download_json_content,
+        download_text_content=download_text_content,
+        rate_limiter=rate_limiter,
+        session=session,
+        acceptable_codes=acceptable_codes,
+        **request_kwargs,
+    )
+
+
+def _build_kwargs(
+    url: Union[str, URL],
+    config: RequestConfig,
+    payload: Optional[BaseModel] = None,
+) -> dict[str, Any]:
     headers = {
         **(config.headers or {}),
         **(
@@ -135,7 +144,7 @@ async def request(
         if config.proxy_config
         else {}
     )
-    all_kwargs = {
+    return {
         "url": url,
         "method": config.method,
         "headers": headers,
@@ -144,6 +153,25 @@ async def request(
         "json": payload.model_dump(mode="json") if payload else None,
         **proxy_kwargs,
     }
+
+
+async def request(
+    url: Union[str, URL],
+    config: RequestConfig = RequestConfig(),
+    payload: Optional[BaseModel] = None,
+) -> Response:
+    """Make a request.
+
+    Args:
+        url: url to send request.
+        config: request configuration.
+        payload: payload to be sent in the request as a structured pydantic model.
+
+    Returns:
+        Response object from the request.
+
+    """
+    logger.debug(f"Request started, {config.method} method to {url}...")
     new_callable = _request.retry_with(**config.retryer.retrying_config)  # type: ignore
 
     async with aiohttp.ClientSession() as new_session:
@@ -153,7 +181,7 @@ async def request(
             rate_limiter=config.rate_limiter,
             session=config.session or new_session,
             acceptable_codes=config.acceptable_codes,
-            **all_kwargs,
+            **_build_kwargs(url=url, config=config, payload=payload),
         )
 
     logger.debug("Request finished!")
@@ -213,6 +241,40 @@ async def request_many(
     return results
 
 
+@tenacity.retry
+async def _request_structured(
+    model: Type[BaseModel],
+    retry_based_on_content_callback: Optional[Callable[[StructuredResponse], bool]],
+    download_json_content: bool,
+    download_text_content: bool,
+    rate_limiter: RateLimiter,
+    session: aiohttp.ClientSession,
+    acceptable_codes: Optional[List[int]] = None,
+    **request_kwargs: Any,
+) -> StructuredResponse:
+    response = await _request_base(
+        download_json_content=download_json_content,
+        download_text_content=download_text_content,
+        rate_limiter=rate_limiter,
+        session=session,
+        acceptable_codes=acceptable_codes,
+        **request_kwargs,
+    )
+    structured_response = StructuredResponse(
+        url=response.url,
+        status_code=response.status_code,
+        headers=response.headers,
+        json_content=response.json_content,
+        text_content=response.text_content,
+        structured_content=model(**response.json_content),
+    )
+    if retry_based_on_content_callback and retry_based_on_content_callback(
+        structured_response.structured_content
+    ):
+        raise ContentCallbackError("Structured content retry callback returned True")
+    return structured_response
+
+
 async def request_structured(
     model: Type[BaseModel],
     url: Union[str, URL],
@@ -235,15 +297,27 @@ async def request_structured(
 
     """
     new_config = config.model_copy(update=dict(download_json_content=True))
-    response = await request(url=url, config=new_config, payload=payload)
-    return StructuredResponse(
-        url=response.url,
-        status_code=response.status_code,
-        headers=response.headers,
-        json_content=response.json_content,
-        text_content=response.text_content,
-        structured_content=model(**response.json_content),
-    )
+    logger.debug(f"Request started, {new_config.method} method to {url}...")
+
+    rc = new_config.retryer.retrying_config
+    new_callable = _request_structured.retry_with(**rc)  # type: ignore
+
+    async with aiohttp.ClientSession() as new_session:
+        structured_response: StructuredResponse = await new_callable(
+            model=model,
+            retry_based_on_content_callback=(
+                new_config.retryer.retry_based_on_content_callback
+            ),
+            download_json_content=new_config.download_json_content,
+            download_text_content=new_config.download_text_content,
+            rate_limiter=new_config.rate_limiter,
+            session=new_config.session or new_session,
+            acceptable_codes=new_config.acceptable_codes,
+            **_build_kwargs(url=url, config=new_config, payload=payload),
+        )
+
+    logger.debug("Request finished!")
+    return structured_response
 
 
 async def request_structured_many(
@@ -290,19 +364,33 @@ async def request_structured_many(
     return results
 
 
-async def is_host_reachable(host: str) -> bool:
-    """Async check if a host is reachable.
+async def poll(
+    model: Type[BaseModel],
+    poll_config: PollConfig,
+    url: Union[str, URL],
+    config: RequestConfig = RequestConfig(),
+) -> StructuredResponse:
+    """Poll a url until a condition is met.
 
     Args:
-        host: url to check if is reachable.
+        url: url to be polled.
+        config: request configuration.
+        model: pydantic model to be used to structure the response.
+        poll_config: poll configuration.
 
     Returns:
-        True if the host is reachable.
+        Structured response.
 
     """
-    dns_solver = aiodns.DNSResolver()
-    try:
-        _ = await dns_solver.query(host, qtype="A")
-        return True
-    except aiodns.error.DNSError:
-        return False
+    logger.debug(f"Polling {url}...")
+    start_time = datetime.datetime.utcnow()
+    elapsed_time = datetime.timedelta(seconds=0)
+    while elapsed_time.total_seconds() < poll_config.timeout:
+        response = await request_structured(model=model, url=url, config=config)
+        if poll_config.success_condition(response.structured_content):
+            logger.debug("Condition met, polling finished!")
+            return response
+        await asyncio.sleep(poll_config.interval)
+        elapsed_time = datetime.datetime.utcnow() - start_time
+        logger.debug(f"Condition not met yet. Elapsed time: {elapsed_time} seconds...")
+    raise PollError("Timeout reached")

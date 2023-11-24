@@ -1,6 +1,14 @@
-from biar import __metadata__
-from biar.errors import ResponseEvaluationError
+from biar.__metadata__ import (
+    __author__,
+    __description__,
+    __license__,
+    __title__,
+    __url__,
+    __version__,
+)
+from biar.errors import ContentCallbackError, PollError, ResponseEvaluationError
 from biar.model import (
+    PollConfig,
     ProxyConfig,
     RateLimiter,
     RequestConfig,
@@ -9,9 +17,9 @@ from biar.model import (
     StructuredResponse,
 )
 from biar.services import (
-    evaluate_response,
     get_ssl_context,
     is_host_reachable,
+    poll,
     request,
     request_many,
     request_structured,
@@ -19,14 +27,18 @@ from biar.services import (
 )
 
 __all__ = [
-    "__metadata__",
+    "__title__",
+    "__description__",
+    "__version__",
+    "__url__",
+    "__author__",
+    "__license__",
     "ProxyConfig",
     "RateLimiter",
     "Response",
     "RequestConfig",
     "Retryer",
     "StructuredResponse",
-    "evaluate_response",
     "get_ssl_context",
     "is_host_reachable",
     "request",
@@ -34,4 +46,8 @@ __all__ = [
     "request_structured_many",
     "ResponseEvaluationError",
     "request_many",
+    "poll",
+    "PollConfig",
+    "PollError",
+    "ContentCallbackError",
 ]
