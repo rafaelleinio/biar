@@ -79,7 +79,9 @@ async def _request_base(
                 f"Text content (if loaded): {text_content}"
             )
 
-        json_content = await response.json() if download_json_content else None
+        json_content = (
+            await response.json(content_type=None) if download_json_content else None
+        )
         normalized_json_content = (
             json_content
             if isinstance(json_content, dict)
