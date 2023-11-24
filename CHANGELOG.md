@@ -5,7 +5,10 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
-## [0.5.1](https://github.com/rafaelleinio/biar/releases/tag/0.5.0)
+## [0.5.2](https://github.com/rafaelleinio/biar/releases/tag/0.5.2)
+* 🛠 disable aiohttp expected content type logic
+
+## [0.5.1](https://github.com/rafaelleinio/biar/releases/tag/0.5.1)
 * 🐛 fix typing compatibility
 
 ## [0.5.0](https://github.com/rafaelleinio/biar/releases/tag/0.5.0)
