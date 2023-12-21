@@ -74,9 +74,10 @@ async def _request_base(
     async with session.request(**request_kwargs) as response:
         text_content = await response.text() if download_text_content else ""
         if response.status not in (acceptable_codes or [200]):
+            formated_text_content = text_content.replace("{", "{{").replace("}", "}}")
             raise ResponseEvaluationError(
                 f"Error: status={response.status}, "
-                f"Text content (if loaded): {text_content}"
+                f"Text content (if loaded): {formated_text_content}"
             )
 
         json_content = (

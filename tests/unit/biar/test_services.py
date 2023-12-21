@@ -97,7 +97,9 @@ class TestRequest:
     @pytest.mark.asyncio
     async def test_request_retry_success(self, mock_server: aioresponses):
         # arrange
-        mock_server.get(url=BASE_URL, status=500)
+        mock_server.get(
+            url=BASE_URL, status=500, payload={"Detail": "Internal Server Error"}
+        )
         mock_server.get(url=BASE_URL, status=200)
 
         # act
