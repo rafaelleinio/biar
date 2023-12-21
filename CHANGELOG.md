@@ -5,6 +5,9 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
+## [0.5.3](https://github.com/rafaelleinio/biar/releases/tag/0.5.3)
+* 🐛 fix error when trying to log on retries
+
 ## [0.5.2](https://github.com/rafaelleinio/biar/releases/tag/0.5.2)
 * 🛠 disable aiohttp expected content type logic
 
