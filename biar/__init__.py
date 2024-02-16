@@ -8,6 +8,7 @@ from biar.__metadata__ import (
 )
 from biar.errors import ContentCallbackError, PollError, ResponseEvaluationError
 from biar.model import (
+    Payload,
     PollConfig,
     ProxyConfig,
     RateLimiter,
@@ -50,4 +51,5 @@ __all__ = [
     "PollConfig",
     "PollError",
     "ContentCallbackError",
+    "Payload",
 ]

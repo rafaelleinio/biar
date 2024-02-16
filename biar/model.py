@@ -208,3 +208,18 @@ class PollConfig(BaseModel):
     timeout: float = 60 * 5
     interval: float = 5
     success_condition: Callable[[BaseModel], bool]
+
+
+class Payload(BaseModel):
+    """Payload definition for a request.
+
+    Attributes:
+        content_type: content type of the payload.
+        any_content: any content to be sent.
+        structured_content: content as a pydantic model.
+
+    """
+
+    content_type: str = "application/json"
+    any_content: Optional[Any] = None
+    structured_content: Optional[BaseModel] = None

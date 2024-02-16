@@ -13,6 +13,7 @@ from yarl import URL
 
 from biar import (
     ContentCallbackError,
+    Payload,
     PollConfig,
     PollError,
     RateLimiter,
@@ -121,7 +122,7 @@ async def _request(
 def _build_kwargs(
     url: Union[str, URL],
     config: RequestConfig,
-    payload: Optional[BaseModel] = None,
+    payload: Optional[Payload] = None,
 ) -> Dict[str, Any]:
     headers = {
         **(config.headers or {}),
@@ -133,6 +134,11 @@ def _build_kwargs(
         **(
             {"Authorization": f"Bearer {config.bearer_token}"}
             if config.bearer_token
+            else {}
+        ),
+        **(
+            {"Content-Type": payload.content_type}
+            if payload and payload.content_type
             else {}
         ),
     }
@@ -153,7 +159,12 @@ def _build_kwargs(
         "headers": headers,
         "params": config.params or None,
         "timeout": config.timeout,
-        "json": payload.model_dump(mode="json") if payload else None,
+        "data": payload.any_content if payload and payload.any_content else None,
+        "json": (
+            payload.structured_content.model_dump(mode="json")
+            if payload and payload.structured_content
+            else None
+        ),
         **proxy_kwargs,
     }
 
@@ -161,14 +172,14 @@ def _build_kwargs(
 async def request(
     url: Union[str, URL],
     config: RequestConfig = RequestConfig(),
-    payload: Optional[BaseModel] = None,
+    payload: Optional[Payload] = None,
 ) -> Response:
     """Make a request.
 
     Args:
         url: url to send request.
         config: request configuration.
-        payload: payload to be sent in the request as a structured pydantic model.
+        payload: payload definition for the request.
 
     Returns:
         Response object from the request.
@@ -193,8 +204,8 @@ async def request(
 
 def _normalize_payloads(
     urls: List[Union[str, URL]],
-    payloads: Optional[List[BaseModel]] = None,
-) -> Optional[List[BaseModel]]:
+    payloads: Optional[List[Payload]] = None,
+) -> Optional[List[Payload]]:
     payloads = payloads or []
     if payloads and len(urls) != len(payloads):
         raise ValueError(
@@ -207,14 +218,14 @@ def _normalize_payloads(
 async def request_many(
     urls: List[Union[str, URL]],
     config: RequestConfig = RequestConfig(),
-    payloads: Optional[List[BaseModel]] = None,
+    payloads: Optional[List[Payload]] = None,
 ) -> List[Response]:
     """Make many requests.
 
     Args:
         urls: list of urls to send requests.
         config: request configuration.
-        payloads: list of payloads as structured pydantic models.
+        payloads: list of payload definitions for the requests.
 
     Returns:
         List of response objects from the requests.
@@ -282,7 +293,7 @@ async def request_structured(
     model: Type[BaseModel],
     url: Union[str, URL],
     config: RequestConfig = RequestConfig(),
-    payload: Optional[BaseModel] = None,
+    payload: Optional[Payload] = None,
 ) -> StructuredResponse:
     """Make a request and structure the response.
 
@@ -293,7 +304,7 @@ async def request_structured(
         model: pydantic model to be used to structure the response content.
         url: url to send request.
         config: request configuration.
-        payload: payload to be sent in the request as a structured pydantic model.
+        payload: payload definition for the request.
 
     Returns:
         Structured response content deserialized as a pydantic model.
@@ -327,7 +338,7 @@ async def request_structured_many(
     model: Type[BaseModel],
     urls: List[Union[str, URL]],
     config: RequestConfig = RequestConfig(),
-    payloads: Optional[List[BaseModel]] = None,
+    payloads: Optional[List[Payload]] = None,
 ) -> List[StructuredResponse]:
     """Make many requests and structure the responses.
 

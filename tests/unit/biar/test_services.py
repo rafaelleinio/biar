@@ -77,7 +77,7 @@ class TestRequest:
         mock_server.put(url=URL(BASE_URL) / "1", callback=callback)
         mock_server.put(url=URL(BASE_URL) / "2", callback=callback)
 
-        class Payload(BaseModel):
+        class StructuredContent(BaseModel):
             key: str
             ts: datetime.datetime
 
@@ -86,8 +86,16 @@ class TestRequest:
             urls=[URL(BASE_URL) / "1", URL(BASE_URL) / "2"],
             config=biar.RequestConfig(method="PUT"),
             payloads=[
-                Payload(key="1", ts="2023-01-01T00:00:00"),
-                Payload(key="2", ts="2023-01-02T00:00:00"),
+                biar.Payload(
+                    structured_content=StructuredContent(
+                        key="1", ts="2023-01-01T00:00:00"
+                    )
+                ),
+                biar.Payload(
+                    structured_content=StructuredContent(
+                        key="2", ts="2023-01-02T00:00:00"
+                    )
+                ),
             ],
         )
 
@@ -198,7 +206,7 @@ class TestRequest:
                 model=MyModel,
                 urls=[BASE_URL] * 2,
                 config=biar.RequestConfig(download_text_content=False),
-                payloads=[MyModel(key="value")],
+                payloads=[biar.Payload(structured_content=MyModel(key="value"))],
             )
 
     @pytest.mark.asyncio
