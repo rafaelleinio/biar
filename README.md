@@ -230,7 +230,7 @@ import biar
 BASE_URL = URL("https://api.com/v1/entity/")
 
 
-class Payload(BaseModel):
+class StructuredContent(BaseModel):
     id: str
     ts: datetime.datetime
     feature: int
@@ -250,7 +250,11 @@ async def main():
         _ = await biar.request(
             url=BASE_URL / "id",
             config=biar.RequestConfig(method="POST"),
-            payload=Payload(id="id", ts=datetime.datetime.now(), feature=123),
+            payload=biar.Payload(
+                structured_content=StructuredContent(
+                    id="id", ts="2023-11-23T01:15:43.883492", feature=123
+                ),
+            )
         )
 
 
