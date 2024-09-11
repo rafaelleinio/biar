@@ -406,7 +406,7 @@ async def poll(
 
     """
     logger.debug(f"Polling {url}...")
-    start_time = datetime.datetime.utcnow()
+    start_time = datetime.datetime.now(datetime.UTC)
     elapsed_time = datetime.timedelta(seconds=0)
     while elapsed_time.total_seconds() < poll_config.timeout:
         response = await request_structured(model=model, url=url, config=config)
@@ -414,6 +414,6 @@ async def poll(
             logger.debug("Condition met, polling finished!")
             return response
         await asyncio.sleep(poll_config.interval)
-        elapsed_time = datetime.datetime.utcnow() - start_time
+        elapsed_time = datetime.datetime.now(datetime.UTC) - start_time
         logger.debug(f"Condition not met yet. Elapsed time: {elapsed_time} seconds...")
     raise PollError("Timeout reached")

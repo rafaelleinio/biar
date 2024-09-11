@@ -111,7 +111,7 @@ class TestRequest:
         mock_server.get(url=BASE_URL, status=200)
 
         # act
-        start_ts = datetime.datetime.utcnow()
+        start_ts = datetime.datetime.now(datetime.UTC)
         output_response = await biar.request(
             url=BASE_URL,
             config=biar.RequestConfig(
@@ -124,7 +124,7 @@ class TestRequest:
                 ),
             ),
         )
-        end_ts = datetime.datetime.utcnow()
+        end_ts = datetime.datetime.now(datetime.UTC)
         elapsed_time = (end_ts - start_ts).total_seconds()
 
         # assert
@@ -186,9 +186,9 @@ class TestRequest:
         ]
 
         # act
-        start_ts = datetime.datetime.utcnow()
+        start_ts = datetime.datetime.now(datetime.UTC)
         _ = event_loop.run_until_complete(gather(*async_requests))
-        end_ts = datetime.datetime.utcnow()
+        end_ts = datetime.datetime.now(datetime.UTC)
         elapsed_time = (end_ts - start_ts).total_seconds()
 
         # assert
