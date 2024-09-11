@@ -5,6 +5,9 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/rafaelleinio/biar/releases/tag/0.7.0)
+* ✨ add option to download content as bytes
+
 ## [0.6.0](https://github.com/rafaelleinio/biar/releases/tag/0.6.0)
 * 🛠 major refactor on the payload argument
 
