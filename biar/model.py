@@ -37,6 +37,7 @@ class Response(BaseModel):
         headers: headers in the response.
         json_content: response content as json dict.
         text_content: raw response content as a string.
+        bytes_content: raw response content as bytes.
 
     """
 
@@ -47,6 +48,7 @@ class Response(BaseModel):
     headers: Dict[str, Any] = Field(default_factory=dict)
     json_content: Dict[str, JsonValue] = Field(default_factory=dict)
     text_content: str = ""
+    bytes_content: bytes = b""
 
 
 class StructuredResponse(Response):
@@ -58,6 +60,7 @@ class StructuredResponse(Response):
         headers: headers in the response.
         json_content: response content as json dict.
         text_content: raw response content as a string.
+        bytes_content: raw response content as bytes.
         structured_content: response content as a pydantic model.
 
     """
@@ -156,6 +159,7 @@ class RequestConfig(BaseModel):
         method: http method to be used.
         download_json_content: if true will await for json content download.
         download_text_content: if true will await for text content download.
+        download_bytes_content: if true will await for bytes content download.
         proxy_config: proxy configuration.
         rate_limiter: rate limiting configuration.
         retryer: retry logic configuration.
@@ -181,6 +185,7 @@ class RequestConfig(BaseModel):
     method: Literal["GET", "POST", "PUT", "DELETE"] = "GET"
     download_json_content: bool = True
     download_text_content: bool = True
+    download_bytes_content: bool = False
     proxy_config: Optional[ProxyConfig] = None
     rate_limiter: RateLimiter = RateLimiter()
     retryer: Retryer = Retryer()

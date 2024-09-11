@@ -66,6 +66,7 @@ def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
 async def _request_base(
     download_json_content: bool,
     download_text_content: bool,
+    download_bytes_content: bool,
     rate_limiter: RateLimiter,
     session: aiohttp.ClientSession,
     acceptable_codes: Optional[List[int]] = None,
@@ -80,7 +81,7 @@ async def _request_base(
                 f"Error: status={response.status}, "
                 f"Text content (if loaded): {formated_text_content}"
             )
-
+        bytes_content = await response.read() if download_bytes_content else b""
         json_content = (
             await response.json(content_type=None) if download_json_content else None
         )
@@ -95,6 +96,7 @@ async def _request_base(
             headers={k: v for k, v in response.headers.items()},
             json_content=normalized_json_content,
             text_content=text_content,
+            bytes_content=bytes_content,
         )
 
     return http_response
@@ -104,6 +106,7 @@ async def _request_base(
 async def _request(
     download_json_content: bool,
     download_text_content: bool,
+    download_bytes_content: bool,
     rate_limiter: RateLimiter,
     session: aiohttp.ClientSession,
     acceptable_codes: Optional[List[int]] = None,
@@ -112,6 +115,7 @@ async def _request(
     return await _request_base(
         download_json_content=download_json_content,
         download_text_content=download_text_content,
+        download_bytes_content=download_bytes_content,
         rate_limiter=rate_limiter,
         session=session,
         acceptable_codes=acceptable_codes,
@@ -192,6 +196,7 @@ async def request(
         response: Response = await new_callable(
             download_json_content=config.download_json_content,
             download_text_content=config.download_text_content,
+            download_bytes_content=config.download_bytes_content,
             rate_limiter=config.rate_limiter,
             session=config.session or new_session,
             acceptable_codes=config.acceptable_codes,
@@ -261,6 +266,7 @@ async def _request_structured(
     retry_based_on_content_callback: Optional[Callable[[StructuredResponse], bool]],
     download_json_content: bool,
     download_text_content: bool,
+    download_bytes_content: bool,
     rate_limiter: RateLimiter,
     session: aiohttp.ClientSession,
     acceptable_codes: Optional[List[int]] = None,
@@ -269,6 +275,7 @@ async def _request_structured(
     response = await _request_base(
         download_json_content=download_json_content,
         download_text_content=download_text_content,
+        download_bytes_content=download_bytes_content,
         rate_limiter=rate_limiter,
         session=session,
         acceptable_codes=acceptable_codes,
@@ -280,6 +287,7 @@ async def _request_structured(
         headers=response.headers,
         json_content=response.json_content,
         text_content=response.text_content,
+        bytes_content=response.bytes_content,
         structured_content=model(**response.json_content),
     )
     if retry_based_on_content_callback and retry_based_on_content_callback(
@@ -324,6 +332,7 @@ async def request_structured(
             ),
             download_json_content=new_config.download_json_content,
             download_text_content=new_config.download_text_content,
+            download_bytes_content=new_config.download_bytes_content,
             rate_limiter=new_config.rate_limiter,
             session=new_config.session or new_session,
             acceptable_codes=new_config.acceptable_codes,
