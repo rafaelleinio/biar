@@ -134,7 +134,7 @@ class RateLimiter(BaseModel):
     time_frame: int = 1
     identity: str = "default"
 
-    @computed_field  # type: ignore[misc]
+    @computed_field  # type: ignore[prop-decorator]
     @cached_property
     def limiter(self) -> Limiter:
         """In memory bucket to limit the number of requests."""

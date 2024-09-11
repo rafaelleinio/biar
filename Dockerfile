@@ -1,4 +1,4 @@
-FROM python:3.11 as dependencies
+FROM python:3.12 as dependencies
 
 ## requirements
 RUN pip install --upgrade pip
