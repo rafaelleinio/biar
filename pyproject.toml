@@ -1,6 +1,6 @@
 [project]
 name = "biar"
-version = "0.7.2"
+version = "0.7.3"
 description = "batteries-included async requests tool for python."
 authors = [
     {name = "Rafael Leinio"}
