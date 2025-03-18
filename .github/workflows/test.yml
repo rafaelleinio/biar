@@ -14,10 +14,10 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Build Image
-      run: docker build -t biar --target dependencies .
+      run: docker build -t biar .
 
     - name: Checks
       run: docker run biar make checks
 
     - name: Tests
-      run: docker run biar make tests
+      run: docker run biar make test

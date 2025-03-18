@@ -1,4 +1,7 @@
+"""Model module."""
+
 import asyncio
+import logging
 from functools import cached_property
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Type
 
@@ -7,7 +10,12 @@ import tenacity
 from aiohttp import ClientResponseError
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, computed_field
-from pyrate_limiter import Duration, InMemoryBucket, Limiter, Rate
+from pyrate_limiter import (  # type: ignore[attr-defined]
+    Duration,
+    InMemoryBucket,
+    Limiter,
+    Rate,
+)
 from yarl import URL
 
 from biar.errors import ContentCallbackError, ResponseEvaluationError
@@ -110,7 +118,8 @@ class Retryer(BaseModel):
             wait=tenacity.wait_exponential(min=self.min_delay, max=self.max_delay),
             reraise=True,
             before_sleep=tenacity.before_sleep_log(
-                logger=logger, log_level="DEBUG"  # type: ignore[arg-type]
+                logger=logger,  # type: ignore[arg-type]
+                log_level=logging.DEBUG,
             ),
         )
 

@@ -1,0 +1,134 @@
+[project]
+name = "biar"
+version = "0.7.1"
+description = "batteries-included async requests tool for python."
+authors = [
+    {name = "Rafael Leinio"}
+]
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+dependencies = [
+    "loguru>=0.7.2,<1.0.0",
+    "pydantic>=2.8.2,<3.0.0",
+    "tenacity>=9.0.0,<10.0.0",
+    "pyrate-limiter>=3.7.0,<4.0.0",
+    "yarl>=1.18.3,<2.0.0",
+    "certifi>=2025.1.31",
+    "aiodns>=3.2.0,<4.0.0",
+    "aiohttp>=3.11.14,<4.0.0"
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.5.2,<1.0.0",
+    "mypy>=1.10.1,<2.0.0",
+    "pytest>=8.2.2,<9.0.0",
+    "pytest-cov>=5.0.0,<6.0.0",
+    "pytest-asyncio>=0.23.7,<1.0.0",
+    "time-machine>=2.14.2,<3.0.0",
+    "twine>=6.1.0,<7.0.0",
+    "aioresponses>=0.7.4,<1.0.0"
+]
+
+[project.urls]
+repository = "https://github.com/rafaelleinio/biar"
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "__pycache__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "D"]
+ignore = [
+    "D211",
+    "D212",
+    "D203",
+    "D105",
+    "D107"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/{tests}/*" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pycodestyle]
+max-line-length = 88
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.ruff.format]
+indent-style = "space"
+
+[tool.ruff.lint.isort]
+known-first-party = ["biar"]
+
+[tool.mypy]
+strict = true
+plugins = [
+    "pydantic.mypy"
+]
+exclude = [
+    "tests/*",
+    ".venv/*",
+    "venv/*"
+]
+
+[tool.pydantic-mypy]
+strict = true
+init_forbid_extra = false
+init_typed = false
+warn_required_dynamic_aliases = false
+warn_untyped_fields = true
+
+[build-system]
+requires = ["pdm-backend", "pip"]
+build-backend = "pdm.backend"
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+
+[tool.coverage.run]
+source = ["biar"]
+branch = true
+
+[tool.coverage.html]
+directory = "tests-cov"
+
+[tool.pytest.ini_options]
+addopts = "--cov-report term --cov-report html:tests-cov --cov=biar"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"

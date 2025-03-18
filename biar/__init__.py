@@ -1,3 +1,5 @@
+"""biar - batteries-included async requests tool for python."""
+
 from biar.__metadata__ import (
     __author__,
     __description__,

@@ -1,17 +1,21 @@
-FROM python:3.12 as dependencies
+FROM python:3.12-slim-bookworm
 
-## requirements
-RUN pip install --upgrade pip
-COPY requirements.dev.txt .
-RUN pip install -r requirements.dev.txt
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Install make and other build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends make && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Set the working directory in the container
 WORKDIR /biar
-COPY . /biar
 
-## setup package
-FROM dependencies as biar
+# Copy project file into the container
+COPY . .
 
-RUN pip install /biar/.
-RUN python -c "import biar"
+# Tell the container about our project layout
+ENV PROJECT_ROOT=/biar
+
+# Install the project dependencies using UV
+RUN uv sync --all-extras --dev
