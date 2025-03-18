@@ -3,7 +3,7 @@
 import asyncio
 import datetime
 import ssl
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Sequence, Type
 
 import aiodns
 import aiohttp
@@ -45,7 +45,7 @@ async def is_host_reachable(host: str) -> bool:
         return False
 
 
-def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
+def get_ssl_context(extra_certificate: str | None = None) -> ssl.SSLContext:
     """Create a ssl context.
 
     It uses the collection of certificates provided by certifi package. Besides, the
@@ -72,7 +72,7 @@ async def _request_base(
     download_bytes_content: bool,
     rate_limiter: RateLimiter,
     session: aiohttp.ClientSession,
-    acceptable_codes: Optional[List[int]] = None,
+    acceptable_codes: list[int] | None = None,
     **request_kwargs: Any,
 ) -> Response:
     rate_limiter.limiter.try_acquire(name=rate_limiter.identity)
@@ -112,7 +112,7 @@ async def _request(
     download_bytes_content: bool,
     rate_limiter: RateLimiter,
     session: aiohttp.ClientSession,
-    acceptable_codes: Optional[List[int]] = None,
+    acceptable_codes: list[int] | None = None,
     **request_kwargs: Any,
 ) -> Response:
     return await _request_base(
@@ -127,10 +127,10 @@ async def _request(
 
 
 def _build_kwargs(
-    url: Union[str, URL],
+    url: str | URL,
     config: RequestConfig,
-    payload: Optional[Payload] = None,
-) -> Dict[str, Any]:
+    payload: Payload | None = None,
+) -> dict[str, Any]:
     headers = {
         **(config.headers or {}),
         **(
@@ -177,9 +177,9 @@ def _build_kwargs(
 
 
 async def request(
-    url: Union[str, URL],
+    url: str | URL,
     config: RequestConfig = RequestConfig(),
-    payload: Optional[Payload] = None,
+    payload: Payload | None = None,
 ) -> Response:
     """Make a request.
 
@@ -211,9 +211,9 @@ async def request(
 
 
 def _normalize_payloads(
-    urls: List[Union[str, URL]],
-    payloads: Optional[List[Payload]] = None,
-) -> Optional[List[Payload]]:
+    urls: Sequence[str | URL],
+    payloads: list[Payload] | None = None,
+) -> list[Payload] | None:
     payloads = payloads or []
     if payloads and len(urls) != len(payloads):
         raise ValueError(
@@ -224,10 +224,10 @@ def _normalize_payloads(
 
 
 async def request_many(
-    urls: List[Union[str, URL]],
+    urls: Sequence[str | URL],
     config: RequestConfig = RequestConfig(),
-    payloads: Optional[List[Payload]] = None,
-) -> List[Response]:
+    payloads: list[Payload] | None = None,
+) -> list[Response]:
     """Make many requests.
 
     Args:
@@ -259,20 +259,20 @@ async def request_many(
         ]
     )
 
-    results: List[Response] = await asyncio.gather(*coroutines)
+    results: list[Response] = await asyncio.gather(*coroutines)
     return results
 
 
 @tenacity.retry
 async def _request_structured(
     model: Type[BaseModel],
-    retry_based_on_content_callback: Optional[Callable[[StructuredResponse], bool]],
+    retry_based_on_content_callback: Callable[[StructuredResponse], bool] | None,
     download_json_content: bool,
     download_text_content: bool,
     download_bytes_content: bool,
     rate_limiter: RateLimiter,
     session: aiohttp.ClientSession,
-    acceptable_codes: Optional[List[int]] = None,
+    acceptable_codes: list[int] | None = None,
     **request_kwargs: Any,
 ) -> StructuredResponse:
     response = await _request_base(
@@ -302,9 +302,9 @@ async def _request_structured(
 
 async def request_structured(
     model: Type[BaseModel],
-    url: Union[str, URL],
+    url: str | URL,
     config: RequestConfig = RequestConfig(),
-    payload: Optional[Payload] = None,
+    payload: Payload | None = None,
 ) -> StructuredResponse:
     """Make a request and structure the response.
 
@@ -348,10 +348,10 @@ async def request_structured(
 
 async def request_structured_many(
     model: Type[BaseModel],
-    urls: List[Union[str, URL]],
+    urls: Sequence[str | URL],
     config: RequestConfig = RequestConfig(),
-    payloads: Optional[List[Payload]] = None,
-) -> List[StructuredResponse]:
+    payloads: list[Payload] | None = None,
+) -> list[StructuredResponse]:
     """Make many requests and structure the responses.
 
     Args:
@@ -386,14 +386,14 @@ async def request_structured_many(
         ]
     )
 
-    results: List[StructuredResponse] = await asyncio.gather(*coroutines)
+    results: list[StructuredResponse] = await asyncio.gather(*coroutines)
     return results
 
 
 async def poll(
     model: Type[BaseModel],
     poll_config: PollConfig,
-    url: Union[str, URL],
+    url: str | URL,
     config: RequestConfig = RequestConfig(),
 ) -> StructuredResponse:
     """Poll a url until a condition is met.
