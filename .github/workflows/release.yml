@@ -7,18 +7,29 @@ on:
 jobs:
   Pipeline:
     if: github.ref == 'refs/heads/main'
-
     runs-on: ubuntu-22.04
     container: python:3.12
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Check out Git repository
+      uses: actions/checkout@v4
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        version: "0.5.8"
+        enable-cache: true
+        cache-suffix: "optional-suffix"
+        cache-dependency-glob: "base/pyproject.toml"
+
+    - name: Set up Python
+      run: uv python install 3.12
 
     - name: Install dependencies
       run: make requirements
 
     - name: Build package
-      run: make package
+      run: make build
 
     - name: Get version
       run: echo "version=$(make version)" >> $GITHUB_ENV

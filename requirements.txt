@@ -1,15 +1,2 @@
-# serder
-pydantic>v2.5
-
-# async and requests core
-aiohttp
-aiodns
-tenacity
-pyrate-limiter
-yarl
-
-# ssl context
-certifi
-
-# logging
-loguru
+build
+uv

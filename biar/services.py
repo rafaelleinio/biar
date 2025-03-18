@@ -1,3 +1,5 @@
+"""Services module."""
+
 import asyncio
 import datetime
 import ssl
@@ -58,8 +60,9 @@ def get_ssl_context(extra_certificate: Optional[str] = None) -> ssl.SSLContext:
     """
     with open(certifi.where()) as f:
         certificate = f.read()
-    if extra_certificate:
-        certificate = certificate + "\n" + extra_certificate
+    certificate = (
+        certificate + "\n" + extra_certificate if extra_certificate else certificate
+    )
     return ssl.create_default_context(cadata=certificate)
 
 

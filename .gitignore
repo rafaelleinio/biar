@@ -154,3 +154,6 @@ cython_debug/
 
 # PyCharm
 .idea/
+
+# Coverage
+tests-cov/
