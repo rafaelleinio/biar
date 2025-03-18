@@ -5,6 +5,9 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
+## [0.7.2](https://github.com/rafaelleinio/biar/releases/tag/0.7.2)
+- 🛠 change project to use uv
+
 ## [0.7.1](https://github.com/rafaelleinio/biar/releases/tag/0.7.1)
 * 🐛 fix utcnow warnings
 * ⬆️ upgrade python to 3.12

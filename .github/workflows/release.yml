@@ -20,7 +20,7 @@ jobs:
         version: "0.5.8"
         enable-cache: true
         cache-suffix: "optional-suffix"
-        cache-dependency-glob: "base/pyproject.toml"
+        cache-dependency-glob: "pyproject.toml"
 
     - name: Set up Python
       run: uv python install 3.12
