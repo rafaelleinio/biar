@@ -20,7 +20,7 @@ jobs:
         version: "0.5.8"
         enable-cache: true
         cache-suffix: "optional-suffix"
-        cache-dependency-glob: "base/pyproject.toml"
+        cache-dependency-glob: "pyproject.toml"
 
     - name: Set up Python
       run: uv python install 3.12
@@ -49,11 +49,11 @@ jobs:
 
     - name: Release already exist
       if: ${{ failure() }}
-      run: echo Release already exist
+      run: echo "Something went wrong, skipping release to pypi.org"
 
     - name: Publish release to pypi.org
       if: ${{ success() }}
       env:
         PYPI_USERNAME: __token__
         PYPI_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-      run: python -m twine upload -u $PYPI_USERNAME -p $PYPI_PASSWORD --verbose dist/*
+      run: uv run twine upload -u $PYPI_USERNAME -p $PYPI_PASSWORD --verbose dist/*
