@@ -5,6 +5,9 @@ Preferably use **Added**, **Changed**, **Removed** and **Fixed** topics in each 
 
 ## [Unreleased]
 
+## [0.7.4](https://github.com/rafaelleinio/biar/releases/tag/0.7.4)
+- ⬆️ bump aiohttp version
+
 ## [0.7.3](https://github.com/rafaelleinio/biar/releases/tag/0.7.3)
 - 🐛 improve typing on services module
 
